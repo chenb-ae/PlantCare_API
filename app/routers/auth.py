@@ -189,7 +189,7 @@ async def login_user(body: UserLoginRequest):
             )
 
         created_at_val = u_data.get("createdAt")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_str)
+        created_at_str = created_at_val.isoformat() if (created_at_val and hasattr(created_at_val, "isoformat")) else str(created_at_val or "")
 
         return ResponseModel(
             success=True,
@@ -224,7 +224,7 @@ async def get_user_profile(user_id: str):
 
         data = doc_ref.to_dict()
         created_at_val = data.get("createdAt")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_str)
+        created_at_str = created_at_val.isoformat() if (created_at_val and hasattr(created_at_val, "isoformat")) else str(created_at_val or "")
 
         return ResponseModel(
             success=True,
@@ -265,7 +265,7 @@ async def update_user_profile(user_id: str, body: UserUpdateRequest):
 
         updated_doc = doc_ref.get().to_dict()
         created_at_val = updated_doc.get("createdAt")
-        created_at_str = created_at_val.isoformat() if hasattr(created_at_val, "isoformat") else str(created_at_str)
+        created_at_str = created_at_val.isoformat() if (created_at_val and hasattr(created_at_val, "isoformat")) else str(created_at_val or "")
 
         return ResponseModel(
             success=True,

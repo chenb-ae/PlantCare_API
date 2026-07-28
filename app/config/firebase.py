@@ -32,9 +32,24 @@ def initialize_firebase():
             firebase_env = os.environ.get("FIREBASE_CREDENTIALS")
             if firebase_env:
                 try:
-                    cred_dict = json.loads(firebase_env)
+                    firebase_env_str = firebase_env.strip()
+                    if firebase_env_str.startswith("'") and firebase_env_str.endswith("'"):
+                        firebase_env_str = firebase_env_str[1:-1]
+
+                    try:
+                        cred_dict = json.loads(firebase_env_str)
+                    except Exception:
+                        import base64
+                        decoded_bytes = base64.b64decode(firebase_env_str)
+                        cred_dict = json.loads(decoded_bytes.decode('utf-8'))
+
+                    if isinstance(cred_dict, dict) and "private_key" in cred_dict:
+                        pk = cred_dict["private_key"]
+                        if "\\n" in pk:
+                            cred_dict["private_key"] = pk.replace("\\n", "\n")
+
                     cred = credentials.Certificate(cred_dict)
-                    print("[Firebase] Khoi tao Firebase Admin SDK tu bien moi truong FIREBASE_CREDENTIALS")
+                    print("[Firebase] Khoi tao Firebase Admin SDK tu bien moi truong FIREBASE_CREDENTIALS thanh cong!")
                 except Exception as e:
                     print(f"[Firebase Warning] Khong the doc FIREBASE_CREDENTIALS: {e}")
                 
