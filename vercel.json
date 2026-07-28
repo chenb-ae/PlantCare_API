@@ -10,11 +10,5 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/simulator/run",
-      "schedule": "*/15 * * * *"
-    }
   ]
 }
