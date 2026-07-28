@@ -18,13 +18,7 @@ async def list_care_logs(
     Sắp xếp theo thời gian mới nhất lên đầu.
     """
     try:
-        logs_stream = (
-            db.collection("logs")
-            .where("plantId", "==", plant_id)
-            .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-            .limit(limit)
-            .stream()
-        )
+        logs_stream = db.collection("logs").where("plantId", "==", plant_id).stream()
 
         results = []
         for doc in logs_stream:
@@ -39,6 +33,10 @@ async def list_care_logs(
                 "notes": data.get("notes", ""),
                 "timestamp": ts_str
             })
+
+        results.sort(key=lambda x: str(x["timestamp"]), reverse=True)
+        if limit:
+            results = results[:limit]
 
         return ResponseModel(
             success=True,
@@ -95,17 +93,21 @@ async def create_care_log(body: LogCreateRequest):
         profile = PLANT_PROFILES.get(plant_type, PLANT_PROFILES["cai_ngot"])
 
         # Lấy thông số cảm biến gần nhất làm cơ sở
-        readings_stream = (
-            db.collection("sensor_readings")
-            .where("plantId", "==", body.plant_id)
-            .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-            .limit(1)
-            .stream()
-        )
-        last_sensor = None
+        readings_stream = db.collection("sensor_readings").where("plantId", "==", body.plant_id).stream()
+        readings_list = []
         for doc in readings_stream:
-            last_sensor = doc.to_dict()
-            break
+            data_dict = doc.to_dict()
+            data_dict["_doc_id"] = doc.id
+            readings_list.append(data_dict)
+
+        def get_ts(x):
+            ts = x.get("timestamp")
+            if hasattr(ts, "timestamp"):
+                return ts.timestamp()
+            return str(ts or "")
+
+        readings_list.sort(key=get_ts, reverse=True)
+        last_sensor = readings_list[0] if readings_list else None
 
         opt = profile["optimal"]
         current_temp = float(last_sensor.get("temperature", 28.0)) if last_sensor else float((opt["temp_min"] + opt["temp_max"]) / 2)
@@ -130,12 +132,24 @@ async def create_care_log(body: LogCreateRequest):
             side_effects_applied.append(f"Đã cộng ngay dinh dưỡng NPK vào đất (N: {current_npk['n']}, P: {current_npk['p']}, K: {current_npk['k']} mg/kg)!")
 
         elif body.action == "shade_covering":
+            current_placement = plant_info.get("placement", "outdoor")
+            if current_placement == "shaded":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Chậu cây hiện tại đã ở trong nhà / che mát rồi, không thể thêm nhật ký che mát nữa!"
+                )
             plant_ref.update({"placement": "shaded"})
             current_temp = round(max(20.0, current_temp - 3.0), 1)
             new_sensor_needed = True
             side_effects_applied.append("Đã chuyển vị trí cây thành 'shaded' và làm dịu nhiệt độ môi trường!")
 
         elif body.action == "sun_exposure":
+            current_placement = plant_info.get("placement", "outdoor")
+            if current_placement == "outdoor":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Chậu cây hiện tại đã ở ngoài trời (phơi nắng) rồi, không thể thêm nhật ký đưa ra nắng nữa!"
+                )
             plant_ref.update({"placement": "outdoor"})
             current_temp = round(min(40.0, current_temp + 2.0), 1)
             new_sensor_needed = True
@@ -148,7 +162,7 @@ async def create_care_log(body: LogCreateRequest):
             })
             side_effects_applied.append("Đã chuyển trạng thái cây sang đã thu hoạch ('harvested').")
 
-        # Ghi ngay lập tức bản ghi cảm biến mới vào Firestore
+        # Ghi ngay lập tức bản ghi cảm biến mới vào Firestore và kiểm tra Cảnh báo vượt ngưỡng
         if new_sensor_needed:
             sensor_id = plant_info.get("sensorId", "sensor_01")
             new_sensor_doc = {
@@ -160,6 +174,12 @@ async def create_care_log(body: LogCreateRequest):
                 "npk": current_npk
             }
             db.collection("sensor_readings").add(new_sensor_doc)
+
+            try:
+                from app.routers.alerts import evaluate_live_plant_alerts
+                evaluate_live_plant_alerts(body.plant_id, force=True)
+            except Exception as eval_err:
+                print(f"Lỗi kiểm tra cảnh báo tức thì từ log: {eval_err}")
 
         return ResponseModel(
             success=True,

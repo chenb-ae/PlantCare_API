@@ -22,6 +22,17 @@ class UserLoginRequest(BaseModel):
 class UserUpdateRequest(BaseModel):
     name: Optional[str] = Field(None, example="Nguyễn Văn A")
 
+class GoogleAuthRequest(BaseModel):
+    name: str = Field(..., example="Nguyễn Văn A")
+    email: str = Field(..., example="user@gmail.com")
+    google_id: Optional[str] = Field(None, example="google_uid_123")
+    avatar_url: Optional[str] = Field(None, example="https://lh3.googleusercontent.com/...")
+
+class ChangePasswordRequest(BaseModel):
+    user_id: str = Field(..., example="user_123")
+    old_password: str = Field(..., example="oldPass123")
+    new_password: str = Field(..., example="newPass123")
+
 class UserProfileResponse(BaseModel):
     user_id: str
     name: str

@@ -25,6 +25,27 @@ os.makedirs(static_dir, exist_ok=True)
 os.makedirs(os.path.join(static_dir, "uploads"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+import asyncio
+
+async def auto_simulator_loop():
+    """
+    Vòng lặp tự động chạy bộ giả lập suy hao 15 phút một lần trên máy chủ FastAPI.
+    """
+    await asyncio.sleep(10)  # Đợi 10 giây sau khi server bật
+    while True:
+        try:
+            from app.config.firebase import db
+            from app.routers.simulator import helper_run_simulation_for_sensor
+            sensors_stream = db.collection("sensors").stream()
+            count = 0
+            for doc in sensors_stream:
+                helper_run_simulation_for_sensor(doc.id, doc.to_dict())
+                count += 1
+            print(f"[Auto-Simulator 15m] Da tu dong chay gia lap suy hao cho {count} cam bien thanh cong!")
+        except Exception as err:
+            print(f"[Auto-Simulator Error] {err}")
+        await asyncio.sleep(900)  # 900 giây = 15 phút
+
 @app.on_event("startup")
 async def startup_event():
     # Tự động đảm bảo 2 cảm biến mặc định (sensor_01 & sensor_02) đã được khởi tạo trong Firestore
@@ -33,6 +54,9 @@ async def startup_event():
         print("[Startup] Da kiem tra va khoi tao 2 thiet bi cam bien mac dinh (sensor_01 & sensor_02)!")
     except Exception as e:
         print(f"[Startup Warning] Khong the tu dong khoi tao sensors: {e}")
+
+    # Kích hoạt vòng lặp tự động giả lập 15 phút/lần dưới nền máy chủ
+    asyncio.create_task(auto_simulator_loop())
 
 # ── Cấu hình CORS cho Flutter App ──────────────────────────────
 app.add_middleware(

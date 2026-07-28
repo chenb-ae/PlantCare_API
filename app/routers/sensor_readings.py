@@ -12,31 +12,39 @@ async def get_latest_sensor_reading(plant_id: str):
     Lấy chỉ số cảm biến thời gian thực mới nhất của một chậu cây (Hiển thị thẻ chỉ số trên màn hình Chi tiết chậu cây).
     """
     try:
-        readings = (
-            db.collection("sensor_readings")
-            .where("plantId", "==", plant_id)
-            .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-            .limit(1)
-            .stream()
+        readings_stream = db.collection("sensor_readings").where("plantId", "==", plant_id).stream()
+        readings = []
+        for doc in readings_stream:
+            d = doc.to_dict()
+            d["_doc_id"] = doc.id
+            readings.append(d)
+
+        if not readings:
+            return ResponseModel(success=True, data=None, message="Chưa có dữ liệu cảm biến.")
+
+        def get_ts(x):
+            ts = x.get("timestamp")
+            if hasattr(ts, "timestamp"):
+                return ts.timestamp()
+            return str(ts or "")
+
+        readings.sort(key=get_ts, reverse=True)
+        data = readings[0]
+        ts_val = data.get("timestamp")
+        ts_str = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
+
+        return ResponseModel(
+            success=True,
+            data={
+                "reading_id": data["_doc_id"],
+                "plant_id": plant_id,
+                "sensor_id": data.get("sensorId", "sensor_01"),
+                "timestamp": ts_str,
+                "temperature": float(data.get("temperature", 0.0)),
+                "soil_humidity": float(data.get("soilHumidity", 0.0)),
+                "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
+            }
         )
-
-        for doc in readings:
-            data = doc.to_dict()
-            ts_val = data.get("timestamp")
-            ts_str = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
-
-            return ResponseModel(
-                success=True,
-                data={
-                    "reading_id": doc.id,
-                    "plant_id": plant_id,
-                    "sensor_id": data.get("sensorId", "sensor_01"),
-                    "timestamp": ts_str,
-                    "temperature": float(data.get("temperature", 0.0)),
-                    "soil_humidity": float(data.get("soilHumidity", 0.0)),
-                    "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
-                }
-            )
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -60,22 +68,22 @@ async def get_sensor_history(
     Lấy lịch sử thông số cảm biến phục vụ vẽ biểu đồ biến thiên theo mã cây (`plant_id`).
     """
     try:
-        query = (
-            db.collection("sensor_readings")
-            .where("plantId", "==", plant_id)
-            .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-        )
+        readings_stream = db.collection("sensor_readings").where("plantId", "==", plant_id).stream()
+        results = []
 
+        cutoff = None
         if hours:
             cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
-            query = query.where("timestamp", ">=", cutoff)
-
-        readings_stream = query.limit(limit).stream()
-        results = []
 
         for doc in readings_stream:
             data = doc.to_dict()
             ts_val = data.get("timestamp")
+            
+            if cutoff and ts_val:
+                dt_val = ts_val if isinstance(ts_val, datetime.datetime) else None
+                if dt_val and dt_val < cutoff:
+                    continue
+
             ts_str = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
 
             results.append({
@@ -87,6 +95,10 @@ async def get_sensor_history(
                 "soil_humidity": float(data.get("soilHumidity", 0.0)),
                 "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
             })
+
+        results.sort(key=lambda x: str(x["timestamp"]), reverse=True)
+        if limit:
+            results = results[:limit]
 
         results.reverse()
 
@@ -110,13 +122,7 @@ async def get_sensor_history_by_sensor(
     Lấy lịch sử thông số cảm biến riêng trực tiếp theo mã cảm biến (`sensor_id`).
     """
     try:
-        readings_stream = (
-            db.collection("sensor_readings")
-            .where("sensorId", "==", sensor_id)
-            .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-            .limit(limit)
-            .stream()
-        )
+        readings_stream = db.collection("sensor_readings").where("sensorId", "==", sensor_id).stream()
         results = []
 
         for doc in readings_stream:
@@ -134,6 +140,10 @@ async def get_sensor_history_by_sensor(
                 "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
             })
 
+        results.sort(key=lambda x: str(x["timestamp"]), reverse=True)
+        if limit:
+            results = results[:limit]
+
         results.reverse()
 
         return ResponseModel(
@@ -144,5 +154,5 @@ async def get_sensor_history_by_sensor(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi khi lấy dữ liệu cảm biến theo mã cảm biến: {str(e)}"
+            detail=f"Lỗi khi lấy lịch sử cảm biến: {str(e)}"
         )

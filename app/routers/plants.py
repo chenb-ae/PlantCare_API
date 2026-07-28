@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, status
+from typing import Optional
 from google.cloud.firestore import SERVER_TIMESTAMP, Query as FirestoreQuery
 from app.config.firebase import db
 from app.config.plant_constants import PLANT_PROFILES, PLANT_TYPES, PLACEMENTS
@@ -12,19 +13,30 @@ def helper_get_latest_sensor_reading(plant_id: str):
     """
     Hàm phụ trợ lấy chỉ số cảm biến gần nhất của một cây trồng.
     """
-    readings = (
-        db.collection("sensor_readings")
-        .where("plantId", "==", plant_id)
-        .order_by("timestamp", direction=FirestoreQuery.DESCENDING)
-        .limit(1)
-        .stream()
-    )
-    for doc in readings:
-        data = doc.to_dict()
+    try:
+        readings_stream = db.collection("sensor_readings").where("plantId", "==", plant_id).stream()
+        readings = []
+        for doc in readings_stream:
+            data = doc.to_dict()
+            data["_doc_id"] = doc.id
+            readings.append(data)
+
+        if not readings:
+            return None
+
+        def get_ts(x):
+            ts = x.get("timestamp")
+            if hasattr(ts, "timestamp"):
+                return ts.timestamp()
+            return str(ts or "")
+
+        readings.sort(key=get_ts, reverse=True)
+        data = readings[0]
         ts_val = data.get("timestamp")
         ts_str = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
+
         return {
-            "reading_id": doc.id,
+            "reading_id": data["_doc_id"],
             "plant_id": plant_id,
             "sensor_id": data.get("sensorId", "sensor_01"),
             "timestamp": ts_str,
@@ -32,19 +44,24 @@ def helper_get_latest_sensor_reading(plant_id: str):
             "soil_humidity": float(data.get("soilHumidity", 0.0)),
             "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
         }
-    return None
+    except Exception as e:
+        print(f"Error in helper_get_latest_sensor_reading: {e}")
+        return None
 
 def helper_get_unread_alerts_count(plant_id: str):
     """
     Hàm phụ trợ đếm số lượng cảnh báo chưa đọc của cây.
     """
-    alerts = (
-        db.collection("alerts")
-        .where("plantId", "==", plant_id)
-        .where("isRead", "==", False)
-        .stream()
-    )
-    return len(list(alerts))
+    try:
+        alerts_stream = db.collection("alerts").where("plantId", "==", plant_id).stream()
+        count = 0
+        for doc in alerts_stream:
+            if doc.to_dict().get("isRead") is False:
+                count += 1
+        return count
+    except Exception as e:
+        print(f"Error in helper_get_unread_alerts_count: {e}")
+        return 0
 
 def helper_get_sensor_name(sensor_id: str) -> str:
     """
@@ -57,16 +74,19 @@ def helper_get_sensor_name(sensor_id: str) -> str:
 
 @router.get("", response_model=ResponseModel)
 async def list_plants(
-    user_id: str = Query(..., alias="userId", description="Mã người dùng (Firebase Auth UID)"),
+    user_id: Optional[str] = Query(None, alias="userId", description="Mã người dùng (Firebase Auth UID)"),
     status_filter: str = Query("growing", alias="status", description="Lọc theo trạng thái: growing | harvested | all")
 ):
     """
-    Lấy danh sách các kế hoạch trồng cây của người dùng (Phục vụ màn hình Dashboard Vườn Của Tôi):
-    - Trả về thông tin cây kèm mã cảm biến (`sensor_id`) và chỉ số cảm biến mới nhất.
+    Lấy danh sách các kế hoạch trồng cây (Phục vụ màn hình Dashboard Vườn Của Tôi):
+    - Nếu không truyền userId, trả về tất cả chậu cây.
     """
     try:
         helper_ensure_default_sensors_exist()
-        plants_stream = db.collection("plants").where("userId", "==", user_id).stream()
+        if user_id:
+            plants_stream = db.collection("plants").where("userId", "==", user_id).stream()
+        else:
+            plants_stream = db.collection("plants").stream()
         results = []
 
         for doc in plants_stream:

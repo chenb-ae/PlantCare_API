@@ -1,8 +1,20 @@
 {
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/api/index.py"
+      "src": "app/main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app/main.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/simulator/run",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

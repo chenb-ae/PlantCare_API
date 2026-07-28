@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from google.cloud.firestore import SERVER_TIMESTAMP
 from app.config.firebase import db
 from app.models.schemas import ResponseModel, SensorDeviceResponse
@@ -142,4 +143,74 @@ async def seed_sensors():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi khởi tạo cảm biến: {str(e)}"
+        )
+
+class CreateSensorRequest(BaseModel):
+    sensor_id: str = Field(None, description="Mã cảm biến (ví dụ: sensor_03). Tự động sinh nếu để trống.")
+    name: str = Field(..., description="Tên cảm biến", example="Cảm biến #3 (Cửa sổ phòng khách)")
+    code: str = Field(None, description="Mã thiết bị", example="ESP32-C3-WINDOW")
+    temp_offset: float = Field(0.0, description="Độ lệch nhiệt độ", example=0.0)
+    humidity_offset: float = Field(0.0, description="Độ lệch độ ẩm", example=0.0)
+
+@router.post("", response_model=ResponseModel, status_code=status.HTTP_201_CREATED)
+async def create_sensor(body: CreateSensorRequest):
+    """
+    API Thêm thiết bị cảm biến phần cứng mới (Phục vụ việc mở rộng thiết bị cảm biến):
+    - Tự động sinh `sensor_id` nếu người dùng không truyền vào.
+    - Khởi tạo trạng thái `available` và tạo dữ liệu khởi chạy ban đầu cho cảm biến.
+    """
+    try:
+        if not body.sensor_id:
+            existing_docs = list(db.collection("sensors").stream())
+            count = len(existing_docs) + 1
+            sensor_id = f"sensor_{count:02d}"
+        else:
+            sensor_id = body.sensor_id
+
+        doc_ref = db.collection("sensors").document(sensor_id)
+        if doc_ref.get().exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Thiết bị cảm biến với mã '{sensor_id}' đã tồn tại!"
+            )
+
+        doc_data = {
+            "sensorId": sensor_id,
+            "name": body.name,
+            "code": body.code or sensor_id.upper(),
+            "tempOffset": body.temp_offset,
+            "humidityOffset": body.humidity_offset,
+            "status": "available",
+            "currentPlantId": None,
+            "createdAt": SERVER_TIMESTAMP
+        }
+        doc_ref.set(doc_data)
+
+        # Tạo chỉ số dữ liệu khởi đầu cho cảm biến mới
+        initial_reading = {
+            "sensorId": sensor_id,
+            "plantId": None,
+            "timestamp": SERVER_TIMESTAMP,
+            "temperature": 28.0,
+            "soilHumidity": 75.0,
+            "npk": {"n": 50.0, "p": 30.0, "k": 40.0}
+        }
+        db.collection("sensor_readings").add(initial_reading)
+
+        return ResponseModel(
+            success=True,
+            data={
+                "sensor_id": sensor_id,
+                "name": body.name,
+                "code": body.code or sensor_id.upper(),
+                "status": "available"
+            },
+            message=f"Đã tạo mới thiết bị cảm biến '{body.name}' ({sensor_id}) thành công!"
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi tạo mới cảm biến: {str(e)}"
         )

@@ -9,18 +9,18 @@ PLANT_PROFILES = {
             "temp_max": 25.0,
             "soil_humidity_min": 70.0,
             "soil_humidity_max": 80.0,
-            "npk": {"n": 7500.0, "p": 3000.0, "k": 7000.0}
+            "npk": {"n": 60.0, "p": 35.0, "k": 45.0}
         },
         "tolerable": {
             "temp_min": 15.0,
             "temp_max": 32.0,
             "soil_humidity_min": 65.0,
             "soil_humidity_max": 85.0,
-            "npk": {"n_min": 6000.0, "p_min": 2400.0, "k_min": 5600.0}
+            "npk": {"n_min": 40.0, "p_min": 20.0, "k_min": 30.0}
         },
-        "npk_decay_per_15min": {"n": 15.0, "p": 6.0, "k": 14.0},
-        "npk_fertilizer_boost": {"n": 1000.0, "p": 400.0, "k": 900.0},
-        "npk_max": {"n": 8000.0, "p": 3200.0, "k": 7500.0}
+        "npk_decay_per_15min": {"n": 0.15, "p": 0.06, "k": 0.14},
+        "npk_fertilizer_boost": {"n": 15.0, "p": 8.0, "k": 10.0},
+        "npk_max": {"n": 90.0, "p": 50.0, "k": 65.0}
     },
     "cai_thia": {
         "label": "Cải thìa",
@@ -29,18 +29,18 @@ PLANT_PROFILES = {
             "temp_max": 30.0,
             "soil_humidity_min": 70.0,
             "soil_humidity_max": 80.0,
-            "npk": {"n": 3000.0, "p": 1200.0, "k": 2760.0}
+            "npk": {"n": 50.0, "p": 30.0, "k": 40.0}
         },
         "tolerable": {
             "temp_min": 15.0,
             "temp_max": 35.0,
             "soil_humidity_min": 60.0,
             "soil_humidity_max": 85.0,
-            "npk": {"n_min": 2400.0, "p_min": 960.0, "k_min": 2200.0}
+            "npk": {"n_min": 35.0, "p_min": 20.0, "k_min": 25.0}
         },
-        "npk_decay_per_15min": {"n": 6.0, "p": 2.4, "k": 5.5},
-        "npk_fertilizer_boost": {"n": 500.0, "p": 200.0, "k": 460.0},
-        "npk_max": {"n": 3500.0, "p": 1400.0, "k": 3200.0}
+        "npk_decay_per_15min": {"n": 0.1, "p": 0.04, "k": 0.08},
+        "npk_fertilizer_boost": {"n": 12.0, "p": 6.0, "k": 8.0},
+        "npk_max": {"n": 80.0, "p": 45.0, "k": 60.0}
     },
     "cai_ngot": {
         "label": "Cải ngọt",
@@ -49,18 +49,18 @@ PLANT_PROFILES = {
             "temp_max": 30.0,
             "soil_humidity_min": 70.0,
             "soil_humidity_max": 80.0,
-            "npk": {"n": 3000.0, "p": 1200.0, "k": 2760.0}
+            "npk": {"n": 55.0, "p": 32.0, "k": 42.0}
         },
         "tolerable": {
             "temp_min": 15.0,
             "temp_max": 35.0,
             "soil_humidity_min": 60.0,
             "soil_humidity_max": 85.0,
-            "npk": {"n_min": 2400.0, "p_min": 960.0, "k_min": 2200.0}
+            "npk": {"n_min": 38.0, "p_min": 22.0, "k_min": 28.0}
         },
-        "npk_decay_per_15min": {"n": 6.0, "p": 2.4, "k": 5.5},
-        "npk_fertilizer_boost": {"n": 500.0, "p": 200.0, "k": 460.0},
-        "npk_max": {"n": 3500.0, "p": 1400.0, "k": 3200.0}
+        "npk_decay_per_15min": {"n": 0.11, "p": 0.05, "k": 0.09},
+        "npk_fertilizer_boost": {"n": 13.0, "p": 7.0, "k": 9.0},
+        "npk_max": {"n": 85.0, "p": 48.0, "k": 62.0}
     },
     "rau_muong": {
         "label": "Rau muống",
