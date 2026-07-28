@@ -60,12 +60,14 @@ class PlantCreateRequest(BaseModel):
     type: str = Field(..., example="cai_ngot", description="cai_thia | cai_ngot | rau_muong | xa_lach")
     sensor_id: str = Field("sensor_01", example="sensor_01", description="Mã cảm biến chọn để gắn (sensor_01 hoặc sensor_02)")
     placement: Optional[str] = Field("outdoor", example="outdoor", description="outdoor | shaded")
+    image_url: Optional[str] = Field(None, example="https://example.com/plant.jpg", description="URL hình ảnh chậu cây")
 
 class PlantUpdateRequest(BaseModel):
     name: Optional[str] = None
     sensor_id: Optional[str] = Field(None, description="Đổi mã cảm biến gắn cho cây")
     placement: Optional[str] = Field(None, description="outdoor | shaded")
     status: Optional[str] = Field(None, description="growing | harvested")
+    image_url: Optional[str] = Field(None, description="Cập nhật URL hình ảnh chậu cây/hình thu hoạch")
 
 class PlantResponse(BaseModel):
     plant_id: str
@@ -75,6 +77,7 @@ class PlantResponse(BaseModel):
     type_label: str
     sensor_id: str
     sensor_name: Optional[str] = None
+    image_url: Optional[str] = None
     planted_at: str
     placement: str
     status: str
@@ -85,7 +88,7 @@ class PlantResponse(BaseModel):
 # ── Care Log Schemas ──────────────────────────────────────────
 class LogCreateRequest(BaseModel):
     plant_id: str = Field(..., example="plant_xyz789")
-    action: str = Field(..., example="watering", description="watering | fertilizing | shade_covering | sun_exposure | pest_control | harvesting")
+    action: str = Field(..., example="watering", description="watering | fertilizing | shade_covering | sun_exposure | harvesting")
     notes: Optional[str] = Field(None, example="Đã tưới nước buổi sáng")
 
 class LogResponse(BaseModel):

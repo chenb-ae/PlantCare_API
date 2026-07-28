@@ -89,7 +89,6 @@ LOG_ACTIONS = [
     "fertilizing",
     "shade_covering",
     "sun_exposure",
-    "pest_control",
     "harvesting"
 ]
 

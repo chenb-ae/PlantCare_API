@@ -2,12 +2,13 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # Khởi tạo kết nối Firebase trước khi import routers
 import app.config.firebase
 
 # Import tất cả các router phân chia theo từng nhóm chức năng
-from app.routers import auth, plants, logs, sensor_readings, alerts, simulator, sensors
+from app.routers import auth, plants, logs, sensor_readings, alerts, simulator, sensors, upload
 from app.routers.sensors import helper_ensure_default_sensors_exist
 
 app = FastAPI(
@@ -17,6 +18,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# ── Cấu hình Phục vụ File tĩnh (Uploads) ────────────────────────
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "static"))
+os.makedirs(static_dir, exist_ok=True)
+os.makedirs(os.path.join(static_dir, "uploads"), exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.on_event("startup")
 async def startup_event():
@@ -44,6 +51,7 @@ app.include_router(logs.router)
 app.include_router(sensor_readings.router)
 app.include_router(alerts.router)
 app.include_router(simulator.router)
+app.include_router(upload.router)
 
 # ── Health Check Endpoint ───────────────────────────────────────
 @app.get("/", tags=["Health Check"])
@@ -60,7 +68,8 @@ async def root_health_check():
             "/api/logs",
             "/api/sensor-readings",
             "/api/alerts",
-            "/api/simulator"
+            "/api/simulator",
+            "/api/upload"
         ]
     }
 

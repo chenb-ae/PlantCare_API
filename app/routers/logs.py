@@ -55,7 +55,7 @@ async def list_care_logs(
 async def create_care_log(body: LogCreateRequest):
     """
     Thêm nhật ký chăm sóc cây mới (Phục vụ màn hình Thêm Nhật Ký Chăm Sóc):
-    - Kiểm tra hành động hợp lệ (`watering`, `fertilizing`, `shade_covering`, `sun_exposure`, `pest_control`, `harvesting`).
+    - Kiểm tra hành động hợp lệ (`watering`, `fertilizing`, `shade_covering`, `sun_exposure`, `harvesting`).
     - Tự động thực thi các tác dụng phụ (Side Effects) lên thông tin cây:
       + `shade_covering`: Đổi vị trí cây thành `shaded` (che mát).
       + `sun_exposure`: Đổi vị trí cây thành `outdoor` (đưa ra nắng).

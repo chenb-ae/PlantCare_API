@@ -66,15 +66,15 @@ async def list_plants(
     """
     try:
         helper_ensure_default_sensors_exist()
-        query = db.collection("plants").where("userId", "==", user_id)
-        if status_filter in ["growing", "harvested"]:
-            query = query.where("status", "==", status_filter)
-
-        plants_stream = query.stream()
+        plants_stream = db.collection("plants").where("userId", "==", user_id).stream()
         results = []
 
         for doc in plants_stream:
             data = doc.to_dict()
+            plant_status = data.get("status", "growing")
+            if status_filter in ["growing", "harvested"] and plant_status != status_filter:
+                continue
+
             planted_val = data.get("plantedAt")
             planted_str = planted_val.isoformat() if hasattr(planted_val, "isoformat") else str(planted_val)
             
@@ -102,6 +102,7 @@ async def list_plants(
                 "type_label": type_label,
                 "sensor_id": sensor_id,
                 "sensor_name": sensor_name,
+                "image_url": data.get("imageUrl"),
                 "planted_at": planted_str,
                 "placement": data.get("placement", "outdoor"),
                 "status": data.get("status", "growing"),
@@ -174,6 +175,7 @@ async def get_plant_detail(plant_id: str):
             "type_label": type_label,
             "sensor_id": sensor_id,
             "sensor_name": sensor_name,
+            "image_url": data.get("imageUrl"),
             "planted_at": planted_str,
             "placement": data.get("placement", "outdoor"),
             "status": data.get("status", "growing"),
@@ -197,7 +199,7 @@ async def create_plant(body: PlantCreateRequest):
     """
     Tạo một kế hoạch trồng cây mới (Thêm chậu cây mới):
     - Người dùng chọn 1 trong các cảm biến sẵn có (`sensor_01` hoặc `sensor_02`).
-    - Gắn cảm biến đó cho chậu cây mới và khởi tạo dữ liệu cảm biến riêng cho thiết bị này.
+    - Hỗ trợ lưu đường dẫn/URL hình ảnh (`image_url`).
     """
     try:
         helper_ensure_default_sensors_exist()
@@ -229,6 +231,7 @@ async def create_plant(body: PlantCreateRequest):
             "name": body.name,
             "type": body.type,
             "sensorId": sensor_id,
+            "imageUrl": body.image_url,
             "plantedAt": SERVER_TIMESTAMP,
             "placement": placement,
             "status": "growing",
@@ -274,6 +277,7 @@ async def create_plant(body: PlantCreateRequest):
                 "type_label": profile["label"],
                 "sensor_id": sensor_id,
                 "sensor_name": sensor_name,
+                "image_url": body.image_url,
                 "planted_at": now_dt.isoformat(),
                 "placement": placement,
                 "status": "growing",
@@ -341,6 +345,9 @@ async def update_plant(plant_id: str, body: PlantUpdateRequest):
                     if s_ref.get().exists:
                         s_ref.update({"currentPlantId": None, "status": "available"})
 
+        if body.image_url is not None:
+            update_fields["imageUrl"] = body.image_url
+
         if update_fields:
             doc_ref.update(update_fields)
 
@@ -371,6 +378,7 @@ async def update_plant(plant_id: str, body: PlantUpdateRequest):
                 "type_label": profile.get("label", plant_type),
                 "sensor_id": sensor_id,
                 "sensor_name": sensor_name,
+                "image_url": updated_data.get("imageUrl"),
                 "planted_at": planted_str,
                 "placement": updated_data.get("placement", "outdoor"),
                 "status": updated_data.get("status", "growing"),
