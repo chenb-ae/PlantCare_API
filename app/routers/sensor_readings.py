@@ -100,8 +100,6 @@ async def get_sensor_history(
         if limit:
             results = results[:limit]
 
-        results.reverse()
-
         return ResponseModel(
             success=True,
             data=results,
@@ -143,8 +141,6 @@ async def get_sensor_history_by_sensor(
         results.sort(key=lambda x: str(x["timestamp"]), reverse=True)
         if limit:
             results = results[:limit]
-
-        results.reverse()
 
         return ResponseModel(
             success=True,

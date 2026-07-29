@@ -136,7 +136,6 @@ async def run_simulator_cron():
     - Tương thích 100% với Vercel Cron (tự động gửi GET/POST request mỗi 15 phút).
     """
     try:
-        helper_ensure_default_sensors_exist()
         sensors_stream = db.collection("sensors").stream()
         results = []
         total_alerts = 0

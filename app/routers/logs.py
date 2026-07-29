@@ -117,10 +117,19 @@ async def create_care_log(body: LogCreateRequest):
         new_sensor_needed = False
 
         if body.action == "watering":
-            current_soil_humidity = round(random.uniform(85.0, 90.0), 1)
-            current_temp = round(max(15.0, current_temp - 2.5), 1)
+            # Tăng độ ẩm đất theo quy luật suy giảm (nếu đất đã ẩm cao sẵn thì tăng ít hơn)
+            if current_soil_humidity >= 85.0:
+                humidity_increase = round(random.uniform(1.0, 3.0), 1)
+            elif current_soil_humidity >= 70.0:
+                humidity_increase = round(random.uniform(3.0, 6.0), 1)
+            else:
+                humidity_increase = round(random.uniform(8.0, 14.0), 1)
+
+            current_soil_humidity = round(min(95.0, current_soil_humidity + humidity_increase), 1)
+            temp_drop = round(random.uniform(0.5, 1.5), 1)
+            current_temp = round(max(15.0, current_temp - temp_drop), 1)
             new_sensor_needed = True
-            side_effects_applied.append("Đã cập nhật ngay: Độ ẩm đất tăng lên 85-90% và nhiệt độ hạ 2.5°C!")
+            side_effects_applied.append(f"Đã tưới nước: Độ ẩm đất tăng nhẹ +{humidity_increase}% (đạt {current_soil_humidity}%)!")
 
         elif body.action == "fertilizing":
             boost = profile["npk_fertilizer_boost"]
@@ -128,8 +137,11 @@ async def create_care_log(body: LogCreateRequest):
             current_npk["n"] = round(min(npk_max["n"], current_npk.get("n", 0.0) + boost["n"]), 1)
             current_npk["p"] = round(min(npk_max["p"], current_npk.get("p", 0.0) + boost["p"]), 1)
             current_npk["k"] = round(min(npk_max["k"], current_npk.get("k", 0.0) + boost["k"]), 1)
+
             new_sensor_needed = True
-            side_effects_applied.append(f"Đã cộng ngay dinh dưỡng NPK vào đất (N: {current_npk['n']}, P: {current_npk['p']}, K: {current_npk['k']} mg/kg)!")
+            side_effects_applied.append(
+                f"Đã bón 1 liều phân NPK (N: +{boost['n']}, P: +{boost['p']}, K: +{boost['k']} mg/kg)! Chỉ số NPK hiện tại: N={current_npk['n']}, P={current_npk['p']}, K={current_npk['k']} mg/kg."
+            )
 
         elif body.action == "shade_covering":
             current_placement = plant_info.get("placement", "outdoor")
@@ -160,26 +172,33 @@ async def create_care_log(body: LogCreateRequest):
                 "status": "harvested",
                 "harvestedAt": SERVER_TIMESTAMP
             })
-            side_effects_applied.append("Đã chuyển trạng thái cây sang đã thu hoạch ('harvested').")
+            sensor_id = plant_info.get("sensorId")
+            if sensor_id:
+                s_ref = db.collection("sensors").document(sensor_id)
+                if s_ref.get().exists:
+                    s_ref.update({
+                        "currentPlantId": None,
+                        "status": "available"
+                    })
+            side_effects_applied.append("Đã thu hoạch cây và giải phóng thiết bị cảm biến!")
 
-        # Ghi ngay lập tức bản ghi cảm biến mới vào Firestore và kiểm tra Cảnh báo vượt ngưỡng
-        if new_sensor_needed:
+        # Ghi nhận chỉ số cảm biến mới tức thì vào Firestore nếu tác động làm thay đổi chỉ số (Tưới nước/Bón phân/Che mát/Đưa ra nắng)
+        if new_sensor_needed and body.action != "harvesting":
             sensor_id = plant_info.get("sensorId", "sensor_01")
-            new_sensor_doc = {
+            db.collection("sensor_readings").add({
                 "plantId": body.plant_id,
                 "sensorId": sensor_id,
                 "timestamp": SERVER_TIMESTAMP,
                 "temperature": current_temp,
                 "soilHumidity": current_soil_humidity,
                 "npk": current_npk
-            }
-            db.collection("sensor_readings").add(new_sensor_doc)
+            })
 
-            try:
-                from app.routers.alerts import evaluate_live_plant_alerts
-                evaluate_live_plant_alerts(body.plant_id, force=True)
-            except Exception as eval_err:
-                print(f"Lỗi kiểm tra cảnh báo tức thì từ log: {eval_err}")
+        try:
+            from app.routers.alerts import evaluate_live_plant_alerts
+            evaluate_live_plant_alerts(body.plant_id, force=True)
+        except Exception as eval_err:
+            print(f"Lỗi kiểm tra cảnh báo tức thì từ log: {eval_err}")
 
         return ResponseModel(
             success=True,

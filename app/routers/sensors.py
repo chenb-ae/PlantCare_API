@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from google.cloud.firestore import SERVER_TIMESTAMP
 from app.config.firebase import db
@@ -41,13 +41,17 @@ def helper_ensure_default_sensors_exist():
                 "createdAt": SERVER_TIMESTAMP
             })
 
+from typing import Optional
+
 @router.get("", response_model=ResponseModel)
-async def list_sensors():
+async def list_sensors(
+    user_id: Optional[str] = Query(None, alias="userId", description="Mã người dùng để lọc cảm biến cá nhân")
+):
     """
-    Lấy danh sách các thiết bị cảm biến sẵn có (Phục vụ dropdown chọn cảm biến khi người dùng tạo Plan trồng mới).
+    Lấy danh sách các thiết bị cảm biến sẵn có (Phục vụ dropdown chọn cảm biến khi người dùng tạo Plan trồng mới):
+    - Nếu truyền `userId`, trả về cảm biến sở hữu bởi user đó + cảm biến chung chưa gán.
     """
     try:
-        helper_ensure_default_sensors_exist()
 
         sensors_stream = db.collection("sensors").stream()
         results = []
@@ -55,6 +59,11 @@ async def list_sensors():
         for doc in sensors_stream:
             data = doc.to_dict()
             s_id = doc.id
+            s_user = data.get("userId")
+
+            if user_id and s_user and s_user != user_id:
+                continue
+
             plant_id = data.get("currentPlantId")
             plant_name = None
 
@@ -70,6 +79,7 @@ async def list_sensors():
                 "name": data.get("name", f"Cảm biến {s_id}"),
                 "code": data.get("code", s_id.upper()),
                 "status": status_val,
+                "user_id": s_user,
                 "current_plant_id": plant_id,
                 "current_plant_name": plant_name
             })
@@ -115,6 +125,7 @@ async def get_sensor_detail(sensor_id: str):
                 "name": data.get("name"),
                 "code": data.get("code"),
                 "status": "assigned" if plant_id else "available",
+                "user_id": data.get("userId"),
                 "current_plant_id": plant_id,
                 "current_plant_name": plant_name
             }
@@ -147,6 +158,7 @@ async def seed_sensors():
 
 class CreateSensorRequest(BaseModel):
     sensor_id: str = Field(None, description="Mã cảm biến (ví dụ: sensor_03). Tự động sinh nếu để trống.")
+    user_id: str = Field(None, description="Mã người dùng sở hữu cảm biến", example="user_123")
     name: str = Field(..., description="Tên cảm biến", example="Cảm biến #3 (Cửa sổ phòng khách)")
     code: str = Field(None, description="Mã thiết bị", example="ESP32-C3-WINDOW")
     temp_offset: float = Field(0.0, description="Độ lệch nhiệt độ", example=0.0)
@@ -155,7 +167,7 @@ class CreateSensorRequest(BaseModel):
 @router.post("", response_model=ResponseModel, status_code=status.HTTP_201_CREATED)
 async def create_sensor(body: CreateSensorRequest):
     """
-    API Thêm thiết bị cảm biến phần cứng mới (Phục vụ việc mở rộng thiết bị cảm biến):
+    API Thêm thiết bị cảm biến phần cứng mới (Phục vụ việc người dùng tự thêm cảm biến cá nhân):
     - Tự động sinh `sensor_id` nếu người dùng không truyền vào.
     - Khởi tạo trạng thái `available` và tạo dữ liệu khởi chạy ban đầu cho cảm biến.
     """
@@ -176,6 +188,7 @@ async def create_sensor(body: CreateSensorRequest):
 
         doc_data = {
             "sensorId": sensor_id,
+            "userId": body.user_id,
             "name": body.name,
             "code": body.code or sensor_id.upper(),
             "tempOffset": body.temp_offset,
@@ -201,6 +214,7 @@ async def create_sensor(body: CreateSensorRequest):
             success=True,
             data={
                 "sensor_id": sensor_id,
+                "user_id": body.user_id,
                 "name": body.name,
                 "code": body.code or sensor_id.upper(),
                 "status": "available"

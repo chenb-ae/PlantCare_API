@@ -9,7 +9,6 @@ import app.config.firebase
 
 # Import tất cả các router phân chia theo từng nhóm chức năng
 from app.routers import auth, plants, logs, sensor_readings, alerts, simulator, sensors, upload
-from app.routers.sensors import helper_ensure_default_sensors_exist
 
 app = FastAPI(
     title="Lush Intelligence - PlanCare Smart Urban Garden API",
@@ -48,13 +47,6 @@ async def auto_simulator_loop():
 
 @app.on_event("startup")
 async def startup_event():
-    # Tự động đảm bảo 2 cảm biến mặc định (sensor_01 & sensor_02) đã được khởi tạo trong Firestore
-    try:
-        helper_ensure_default_sensors_exist()
-        print("[Startup] Da kiem tra va khoi tao 2 thiet bi cam bien mac dinh (sensor_01 & sensor_02)!")
-    except Exception as e:
-        print(f"[Startup Warning] Khong the tu dong khoi tao sensors: {e}")
-
     # Kích hoạt vòng lặp tự động giả lập 15 phút/lần dưới nền máy chủ
     asyncio.create_task(auto_simulator_loop())
 
