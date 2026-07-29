@@ -25,21 +25,9 @@ DEFAULT_SENSORS = [
 
 def helper_ensure_default_sensors_exist():
     """
-    Khởi tạo tự động 2 thiết bị cảm biến mẫu nếu chưa có trong Firestore.
+    Không tự động tạo 2 cảm biến mặc định nữa (User tự quản lý cảm biến của riêng mình).
     """
-    for s_info in DEFAULT_SENSORS:
-        doc_ref = db.collection("sensors").document(s_info["sensor_id"])
-        if not doc_ref.get().exists:
-            doc_ref.set({
-                "sensorId": s_info["sensor_id"],
-                "name": s_info["name"],
-                "code": s_info["code"],
-                "tempOffset": s_info["temp_offset"],
-                "humidityOffset": s_info["humidity_offset"],
-                "status": "available",
-                "currentPlantId": None,
-                "createdAt": SERVER_TIMESTAMP
-            })
+    pass
 
 from typing import Optional
 
@@ -48,11 +36,9 @@ async def list_sensors(
     user_id: Optional[str] = Query(None, alias="userId", description="Mã người dùng để lọc cảm biến cá nhân")
 ):
     """
-    Lấy danh sách các thiết bị cảm biến sẵn có (Phục vụ dropdown chọn cảm biến khi người dùng tạo Plan trồng mới):
-    - Nếu truyền `userId`, trả về cảm biến sở hữu bởi user đó + cảm biến chung chưa gán.
+    Lấy danh sách các thiết bị cảm biến cá nhân của người dùng.
     """
     try:
-
         sensors_stream = db.collection("sensors").stream()
         results = []
 
@@ -61,7 +47,12 @@ async def list_sensors(
             s_id = doc.id
             s_user = data.get("userId")
 
-            if user_id and s_user and s_user != user_id:
+            # Bỏ 2 cảm biến mặc định khỏi UI
+            if s_id in ["sensor_01", "sensor_02"]:
+                continue
+
+            # Mỗi user CHỈ nhìn thấy & sử dụng cảm biến do chính họ tự tạo!
+            if user_id and s_user != user_id:
                 continue
 
             plant_id = data.get("currentPlantId")
@@ -227,4 +218,39 @@ async def create_sensor(body: CreateSensorRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi tạo mới cảm biến: {str(e)}"
+        )
+
+@router.delete("/{sensor_id}", response_model=ResponseModel)
+async def delete_sensor(sensor_id: str):
+    """
+    Xóa thiết bị cảm biến khỏi hệ thống.
+    """
+    try:
+        doc_ref = db.collection("sensors").document(sensor_id)
+        s_doc = doc_ref.get()
+        if not s_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Không tìm thấy cảm biến '{sensor_id}'"
+            )
+
+        data = s_doc.to_dict()
+        current_plant_id = data.get("currentPlantId")
+        if current_plant_id:
+            p_ref = db.collection("plants").document(current_plant_id)
+            if p_ref.get().exists:
+                p_ref.update({"sensorId": None})
+
+        doc_ref.delete()
+        return ResponseModel(
+            success=True,
+            data={"sensor_id": sensor_id},
+            message=f"Đã xóa thiết bị cảm biến '{sensor_id}' thành công!"
+        )
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi xóa cảm biến: {str(e)}"
         )

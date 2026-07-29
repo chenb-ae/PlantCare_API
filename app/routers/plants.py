@@ -230,18 +230,18 @@ async def create_plant(body: PlantCreateRequest):
                 detail=f"Loại cây '{body.type}' không hợp lệ. Hợp lệ: {PLANT_TYPES}"
             )
 
-        sensor_id = body.sensor_id or "sensor_01"
-        sensor_doc_ref = db.collection("sensors").document(sensor_id)
-        if not sensor_doc_ref.get().exists:
-            # Tạo mới cảm biến nếu chưa có
-            sensor_doc_ref.set({
-                "sensorId": sensor_id,
-                "name": f"Cảm biến {sensor_id}",
-                "code": sensor_id.upper(),
-                "status": "available",
-                "currentPlantId": None,
-                "createdAt": SERVER_TIMESTAMP
-            })
+        sensor_id = body.sensor_id
+        if sensor_id:
+            sensor_doc_ref = db.collection("sensors").document(sensor_id)
+            if not sensor_doc_ref.get().exists:
+                sensor_doc_ref.set({
+                    "sensorId": sensor_id,
+                    "name": f"Cảm biến {sensor_id}",
+                    "code": sensor_id.upper(),
+                    "status": "available",
+                    "currentPlantId": None,
+                    "createdAt": SERVER_TIMESTAMP
+                })
 
         placement = body.placement if body.placement in PLACEMENTS else "outdoor"
         now_dt = datetime.datetime.now(datetime.timezone.utc)
@@ -262,11 +262,11 @@ async def create_plant(body: PlantCreateRequest):
         new_doc_ref = db.collection("plants").document()
         new_doc_ref.set(plant_doc)
 
-        # Gắn cảm biến cho cây mới này trong collection sensors
-        sensor_doc_ref.update({
-            "currentPlantId": new_doc_ref.id,
-            "status": "assigned"
-        })
+        if sensor_id:
+            db.collection("sensors").document(sensor_id).update({
+                "currentPlantId": new_doc_ref.id,
+                "status": "assigned"
+            })
 
         # Khởi tạo dữ liệu cảm biến ban đầu theo dải tối ưu của loại cây
         profile = PLANT_PROFILES[body.type]
@@ -274,7 +274,7 @@ async def create_plant(body: PlantCreateRequest):
 
         initial_sensor = {
             "plantId": new_doc_ref.id,
-            "sensorId": sensor_id,
+            "sensorId": sensor_id or "unassigned",
             "timestamp": SERVER_TIMESTAMP,
             "temperature": round((opt["temp_min"] + opt["temp_max"]) / 2, 1),
             "soilHumidity": round((opt["soil_humidity_min"] + opt["soil_humidity_max"]) / 2, 1),
@@ -285,7 +285,7 @@ async def create_plant(body: PlantCreateRequest):
             }
         }
         db.collection("sensor_readings").add(initial_sensor)
-        sensor_name = helper_get_sensor_name(sensor_id)
+        sensor_name = helper_get_sensor_name(sensor_id) if sensor_id else "Chưa ngắt kết nối"
 
         return ResponseModel(
             success=True,
