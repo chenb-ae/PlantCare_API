@@ -164,18 +164,14 @@ async def create_sensor(body: CreateSensorRequest):
     """
     try:
         if not body.sensor_id:
-            existing_docs = list(db.collection("sensors").stream())
-            count = len(existing_docs) + 1
+            existing_sensor_ids = set(doc.id for doc in db.collection("sensors").stream())
+            count = len(existing_sensor_ids) + 1
             sensor_id = f"sensor_{count:02d}"
+            while sensor_id in existing_sensor_ids:
+                count += 1
+                sensor_id = f"sensor_{count:02d}"
         else:
             sensor_id = body.sensor_id
-
-        doc_ref = db.collection("sensors").document(sensor_id)
-        if doc_ref.get().exists:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Thiết bị cảm biến với mã '{sensor_id}' đã tồn tại!"
-            )
 
         doc_data = {
             "sensorId": sensor_id,
