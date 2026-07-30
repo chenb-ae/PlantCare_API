@@ -190,14 +190,14 @@ async def create_sensor(body: CreateSensorRequest):
         }
         doc_ref.set(doc_data)
 
-        # Tạo chỉ số dữ liệu khởi đầu cho cảm biến mới
+        # Tạo chỉ số dữ liệu khởi đầu cho cảm biến mới theo tiêu chuẩn tối ưu
         initial_reading = {
             "sensorId": sensor_id,
             "plantId": None,
             "timestamp": SERVER_TIMESTAMP,
-            "temperature": 28.0,
+            "temperature": 27.0,
             "soilHumidity": 75.0,
-            "npk": {"n": 50.0, "p": 30.0, "k": 40.0}
+            "npk": {"n": 80.0, "p": 50.0, "k": 130.0}
         }
         db.collection("sensor_readings").add(initial_reading)
 

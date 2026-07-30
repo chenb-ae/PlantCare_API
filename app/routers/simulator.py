@@ -88,11 +88,22 @@ def helper_run_simulation_for_sensor(sensor_doc_id: str, sensor_data: dict) -> d
     noise_soil = random.uniform(-0.1, 0.1)
     soil_humidity = round(max(15.0, min(98.0, prev_soil_humidity - decay_rate + noise_soil)), 1)
 
-    # 4. Giả lập Lượng NPK (mg/kg) tiêu thụ tự nhiên theo thời gian
-    npk_decay = profile["npk_decay_per_15min"]
-    new_n = max(0.0, prev_npk.get("n", profile["optimal"]["npk"]["n"]) - npk_decay["n"] + random.uniform(-0.05, 0.05))
-    new_p = max(0.0, prev_npk.get("p", profile["optimal"]["npk"]["p"]) - npk_decay["p"] + random.uniform(-0.02, 0.02))
-    new_k = max(0.0, prev_npk.get("k", profile["optimal"]["npk"]["k"]) - npk_decay["k"] + random.uniform(-0.04, 0.04))
+    # 4. Giả lập Lượng NPK (mg/kg) tiêu thụ tự nhiên theo sinh học quang hợp môi trường
+    # Ban ngày (6h - 18h) cây quang hợp mạnh -> rễ hút dinh dưỡng NPK gấp 2.2 lần ban đêm
+    is_daytime = 6.0 <= current_hour <= 18.0
+    day_factor = 2.2 if is_daytime else 0.8
+
+    # Độ ẩm đất cao hỗ trợ hòa tan & khuếch tán ion N-P-K tốt hơn
+    moisture_factor = min(1.3, max(0.5, prev_soil_humidity / 75.0))
+
+    npk_base = profile["npk_decay_per_15min"]
+    decay_n = npk_base["n"] * day_factor * moisture_factor + random.uniform(-0.10, 0.10)
+    decay_p = npk_base["p"] * day_factor * moisture_factor + random.uniform(-0.06, 0.06)
+    decay_k = npk_base["k"] * day_factor * moisture_factor + random.uniform(-0.15, 0.15)
+
+    new_n = max(0.0, prev_npk.get("n", profile["optimal"]["npk"]["n"]) - decay_n)
+    new_p = max(0.0, prev_npk.get("p", profile["optimal"]["npk"]["p"]) - decay_p)
+    new_k = max(0.0, prev_npk.get("k", profile["optimal"]["npk"]["k"]) - decay_k)
 
     new_npk = {
         "n": round(new_n, 1),
@@ -439,7 +450,7 @@ async def get_demo_control_panel():
 
             <div class="card">
                 <div class="card-title">📡 1. Chọn Thiết Bị Cảm Biến Cần Can Thiệp</div>
-                <select id="sensorSelect">
+                <select id="sensorSelect" onchange="onSensorSelectionChanged()">
                     <option value="">Đang tải danh sách thiết bị cảm biến từ Firestore...</option>
                 </select>
             </div>
@@ -451,7 +462,7 @@ async def get_demo_control_panel():
                     <button class="btn-preset warning" onclick="applyPreset(28.0, 35.0, 50, 30, 40)">🌵 Đất Khô Hạn (35.0%)</button>
                     <button class="btn-preset info" onclick="applyPreset(26.0, 92.0, 50, 30, 40)">💧 Ngập Úng Rễ (92.0%)</button>
                     <button class="btn-preset danger" onclick="applyPreset(28.0, 75.0, 15, 8, 10)">🍂 Suy Kiệt NPK (15/8/10)</button>
-                    <button class="btn-preset success" onclick="applyPreset(25.0, 75.0, 55, 32, 42)">🟢 Lý Tưởng Chuẩn (25°C, 75%)</button>
+                    <button class="btn-preset success" onclick="applyPreset(25.0, 75.0, 80, 50, 130)">🟢 Lý Tưởng Chuẩn (25°C, 75%)</button>
                 </div>
             </div>
 
@@ -479,15 +490,15 @@ async def get_demo_control_panel():
                     <div class="npk-grid">
                         <div>
                             <span style="font-size: 12px; color: var(--subtext);">Nitơ (N)</span>
-                            <input type="number" id="npkN" value="50" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
+                            <input type="number" id="npkN" value="80" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
                         </div>
                         <div>
                             <span style="font-size: 12px; color: var(--subtext);">Phốt pho (P)</span>
-                            <input type="number" id="npkP" value="30" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
+                            <input type="number" id="npkP" value="50" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
                         </div>
                         <div>
                             <span style="font-size: 12px; color: var(--subtext);">Kali (K)</span>
-                            <input type="number" id="npkK" value="40" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
+                            <input type="number" id="npkK" value="130" style="width: 100%; padding: 8px; border-radius: 6px; background: #0f172a; border: 1px solid var(--border); color: #fff;">
                         </div>
                     </div>
                 </div>
@@ -520,8 +531,40 @@ async def get_demo_control_panel():
                         opt.innerText = "Cảm biến #1 (sensor_01)";
                         select.appendChild(opt);
                     }
+
+                    await onSensorSelectionChanged();
                 } catch (e) {
                     console.error("Lỗi tải cảm biến:", e);
+                }
+            }
+
+            async function onSensorSelectionChanged() {
+                const sensorId = document.getElementById('sensorSelect').value;
+                if (!sensorId) return;
+
+                try {
+                    const res = await fetch(`/api/sensor-readings/by-sensor/${sensorId}`);
+                    const data = await res.json();
+                    if (data.success && data.data) {
+                        const rd = data.data;
+                        const temp = rd.temperature != null ? rd.temperature : 27.0;
+                        const hum = rd.soil_humidity != null ? rd.soil_humidity : 75.0;
+                        const npk = rd.npk || {n: 80, p: 50, k: 130};
+
+                        document.getElementById('tempInput').value = temp;
+                        document.getElementById('tempVal').innerText = temp.toFixed(1) + ' °C';
+
+                        document.getElementById('humInput').value = hum;
+                        document.getElementById('humVal').innerText = hum.toFixed(1) + ' %';
+
+                        document.getElementById('npkN').value = Math.round(npk.n || 80);
+                        document.getElementById('npkP').value = Math.round(npk.p || 50);
+                        document.getElementById('npkK').value = Math.round(npk.k || 130);
+
+                        showStatus(`ℹ️ Đã đồng bộ thông số thực tế của Cảm biến '${sensorId}': ${temp}°C | ${hum}% | NPK(${Math.round(npk.n)}/${Math.round(npk.p)}/${Math.round(npk.k)})`, true);
+                    }
+                } catch (e) {
+                    console.error("Lỗi tải thông số cảm biến:", e);
                 }
             }
 

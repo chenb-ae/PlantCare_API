@@ -45,17 +45,66 @@ async def get_latest_sensor_reading(plant_id: str):
                 "npk": data.get("npk", {"n": 0.0, "p": 0.0, "k": 0.0})
             }
         )
-
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chưa có dữ liệu cảm biến cho cây này."
-        )
     except HTTPException as he:
         raise he
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Lỗi khi lấy thông số cảm biến mới nhất: {str(e)}"
+        )
+
+@router.get("/by-sensor/{sensor_id}", response_model=ResponseModel)
+async def get_latest_reading_by_sensor_id(sensor_id: str):
+    """
+    Lấy bản ghi cảm biến mới nhất trực tiếp bằng `sensor_id` (Phục vụ Bảng điều khiển Demo Giảng viên).
+    """
+    try:
+        readings_stream = db.collection("sensor_readings").where("sensorId", "==", sensor_id).stream()
+        readings = []
+        for doc in readings_stream:
+            d = doc.to_dict()
+            d["_doc_id"] = doc.id
+            readings.append(d)
+
+        if not readings:
+            return ResponseModel(
+                success=True,
+                data={
+                    "sensor_id": sensor_id,
+                    "temperature": 27.0,
+                    "soil_humidity": 75.0,
+                    "npk": {"n": 80.0, "p": 50.0, "k": 130.0}
+                },
+                message="Chưa có dữ liệu cảm biến cũ, trả về dữ liệu mẫu."
+            )
+
+        def get_ts(x):
+            ts = x.get("timestamp")
+            if hasattr(ts, "timestamp"):
+                return ts.timestamp()
+            return str(ts or "")
+
+        readings.sort(key=get_ts, reverse=True)
+        data = readings[0]
+        ts_val = data.get("timestamp")
+        ts_str = ts_val.isoformat() if hasattr(ts_val, "isoformat") else str(ts_val)
+
+        return ResponseModel(
+            success=True,
+            data={
+                "reading_id": data["_doc_id"],
+                "sensor_id": sensor_id,
+                "plant_id": data.get("plantId"),
+                "timestamp": ts_str,
+                "temperature": float(data.get("temperature", 27.0)),
+                "soil_humidity": float(data.get("soilHumidity", 75.0)),
+                "npk": data.get("npk", {"n": 80.0, "p": 50.0, "k": 130.0})
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi khi lấy dữ liệu cảm biến '{sensor_id}': {str(e)}"
         )
 
 @router.get("/history/{plant_id}", response_model=ResponseModel)
