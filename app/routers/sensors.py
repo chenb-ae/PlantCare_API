@@ -173,6 +173,7 @@ async def create_sensor(body: CreateSensorRequest):
         else:
             sensor_id = body.sensor_id
 
+        doc_ref = db.collection("sensors").document(sensor_id)
         doc_data = {
             "sensorId": sensor_id,
             "userId": body.user_id,
